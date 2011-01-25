@@ -1,0 +1,2 @@
+include demo/demo.py
+include *.rst *.txt *.cfg
