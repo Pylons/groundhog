@@ -94,6 +94,10 @@ class Groundhog(object):
             return func
         return decorator
 
+    def get_wsgiapp(self):
+        self.config.end()
+        return self.config.make_wsgi_app()
+
     def run(self, host=None, port=8080, debug=False):
         self.config.end()
         app = self.config.make_wsgi_app()
