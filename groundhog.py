@@ -3,16 +3,15 @@ from paste.registry import StackedObjectProxy
 from paste.registry import RegistryManager
 
 from weberror.evalexception import EvalException
-import webob.exc
 
 from pyramid.config import Configurator
 from pyramid.events import NewRequest
 from pyramid.exceptions import NotFound
-from pyramid.exceptions import Forbidden
 from pyramid.url import route_url
 from pyramid.session import UnencryptedCookieSessionFactoryConfig
 from pyramid.threadlocal import get_current_request
 from pyramid.view import AppendSlashNotFoundViewFactory
+from pyramid import httpexceptions # API
 
 from pyramid_jinja2 import renderer_factory as j2_renderer_factory
 
@@ -44,8 +43,8 @@ class Groundhog(object):
         self.config.set_renderer_globals_factory(self.renderer_globals_factory)
         notfound_view = AppendSlashNotFoundViewFactory()
         self.config.add_view(notfound_view, context=NotFound)
-        self.config.add_view(self.webob_exc_handler,
-                             context=webob.exc.WSGIHTTPException)
+        self.config.add_view(self.exc_handler,
+                             context=httpexceptions.WSGIHTTPException)
         self.config.add_static_view('static', '%s:static' % self.package)
         self.config.add_subscriber(self.start_request, NewRequest)
         self.config.commit()
@@ -59,14 +58,14 @@ class Groundhog(object):
             reg.register(application, self)
             reg.register(g, self.g)
 
-    def webob_exc_handler(self, exc, request):
+    def exc_handler(self, exc, request):
         return request.get_response(exc)
 
     def renderer_factory(self, name):
         def render_(value, system):
             request = system.get('request')
             if request is not None:
-                request.response_content_type = 'text/html'
+                request.response.content_type = 'text/html'
             return value
         return render_
 
@@ -117,10 +116,10 @@ class Groundhog(object):
         return get_current_request()
 
     def abort(self, code, message=''):
-        raise webob.exc.status_map[code](message)
+        raise httpexceptions.status_map[code](message)
 
     def redirect(self, url):
-        raise webob.exc.HTTPFound(location=url)
+        raise httpexceptions.HTTPFound(location=url)
 
     def listen(self, event_type=None):
         def decorator(func):
@@ -131,22 +130,18 @@ class Groundhog(object):
         self.config.registry.notify(event)
 
     def errorhandler(self, code):
-        status_map = {404:NotFound, 403:Forbidden}
-
         def decorator(func):
             def errfunc(exc, request):
-                request.response_status = exc.status
+                request.response.status = exc.status
                 return func(exc)
 
-            webob_exc = webob.exc.status_map.get(code)
-            pyramid_exc = status_map.get(code)
+            exc = httpexceptions.status_map.get(code)
 
-            for exc in (webob_exc, pyramid_exc):
-                if exc is not None:
-                    view = errfunc
-                    if exc is NotFound:
-                        view = AppendSlashNotFoundViewFactory(errfunc)
-                    self.config.add_view(view,context=exc)
+            if exc is not None:
+                view = errfunc
+                if exc is NotFound:
+                    view = AppendSlashNotFoundViewFactory(errfunc)
+                self.config.add_view(view,context=exc)
 
             return func
 

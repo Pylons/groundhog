@@ -23,7 +23,7 @@ except IOError:
     README = CHANGES = ''
 
 install_requires=[
-    'pyramid',
+    'pyramid>=1.1a3',
     'pyramid_jinja2',
     'Paste',
     'WebError',
